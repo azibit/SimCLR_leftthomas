@@ -127,16 +127,16 @@ if __name__ == '__main__':
     batch_size, epochs = args.batch_size, args.epochs
 
     # data prepare
-    # train_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.train_transform, download=True)
-    root_data = '../../Check_Data/ETIS/'
-    train_data = utils.EndoscopyDataset(root_data=root_data + 'train', transform=utils.train_transform)
+    train_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.train_transform, download=True)
+    # root_data = '../../Check_Data/ETIS/'
+    # train_data = utils.EndoscopyDataset(root_data=root_data + 'train', transform=utils.train_transform)
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
                               drop_last=True)
-    # memory_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.test_transform, download=True)
-    memory_data = utils.EndoscopyDataset(root_data=root_data + 'train', transform=utils.test_transform)
+    memory_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.test_transform, download=True)
+    # memory_data = utils.EndoscopyDataset(root_data=root_data + 'train', transform=utils.test_transform)
     memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
-    # test_data = utils.CIFAR10Pair(root='data', train=False, transform=utils.test_transform, download=True)
-    test_data = utils.EndoscopyDataset(root_data=root_data + 'test', transform=utils.test_transform)
+    test_data = utils.CIFAR10Pair(root='data', train=False, transform=utils.test_transform, download=True)
+    # test_data = utils.EndoscopyDataset(root_data=root_data + 'test', transform=utils.test_transform)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
 
     # model setup and optimizer config
@@ -145,8 +145,8 @@ if __name__ == '__main__':
     flops, params = clever_format([flops, params])
     print('# Model Params: {} FLOPs: {}'.format(params, flops))
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-6)
-    # c = len(memory_data.classes)
-    c = 2
+    c = len(memory_data.classes)
+    # c = 2
 
     # training loop
     results = {'train_loss': [], 'test_acc@1': [], 'test_acc@5': []}
@@ -163,6 +163,6 @@ if __name__ == '__main__':
         # save statistics
         #data_frame = pd.DataFrame(data=results, index=range(1, epoch + 1))
         #data_frame.to_csv('results/{}_statistics.csv'.format(save_name_pre), index_label='epoch')
-        #if test_acc_1 > best_acc:
-        #    best_acc = test_acc_1
-        #    torch.save(model.state_dict(), 'results/{}_model.pth'.format(save_name_pre))
+        if train_loss > best_acc:
+           best_acc = train_loss
+           torch.save(model.state_dict(), 'results/{}_model.pth'.format(save_name_pre))
