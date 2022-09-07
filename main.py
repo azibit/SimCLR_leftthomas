@@ -10,12 +10,15 @@ from tqdm import tqdm
 
 import utils
 from model import Model
+import torch.nn.functional as F
 
 
 # train for one epoch to learn unique features
 def train(net, data_loader, train_optimizer):
     net.train()
     total_loss, total_num, train_bar = 0.0, 0, tqdm(data_loader)
+    total_avg_pos_sim, total_avg_neg_sim, total_count = 0, 0, 1
+
     for pos_1, pos_2, target in train_bar:
         pos_1, pos_2 = pos_1.cuda(non_blocking=True), pos_2.cuda(non_blocking=True)
         feature_1, out_1 = net(pos_1)
@@ -23,6 +26,19 @@ def train(net, data_loader, train_optimizer):
         # [2*B, D]
         out = torch.cat([out_1, out_2], dim=0)
         # [2*B, 2*B]
+        sim_res = torch.mm(out, out.t().contiguous())
+        sim_res = F.relu(sim_res)
+
+        first_half_diags = torch.diagonal(sim_res, batch_size)
+        second_half_diags = torch.diagonal(sim_res.T, batch_size)
+        diags = torch.diagonal(sim_res)
+        pos_sums = (diags.sum() + first_half_diags.sum() + second_half_diags.sum())
+        neg_sums = sim_res.sum() - pos_sums.sum()
+
+        total_pos_counts = batch_size * 4
+        avg_pos_sim = pos_sums / total_pos_counts
+        avg_neg_sim = neg_sums / (batch_size * batch_size * 4 - total_pos_counts)
+
         sim_matrix = torch.exp(torch.mm(out, out.t().contiguous()) / temperature)
         mask = (torch.ones_like(sim_matrix) - torch.eye(2 * batch_size, device=sim_matrix.device)).bool()
         # [2*B, 2*B-1]
@@ -32,14 +48,20 @@ def train(net, data_loader, train_optimizer):
         pos_sim = torch.exp(torch.sum(out_1 * out_2, dim=-1) / temperature)
         # [2*B]
         pos_sim = torch.cat([pos_sim, pos_sim], dim=0)
-        loss = (- torch.log(pos_sim / sim_matrix.sum(dim=-1))).mean()
+        # loss = (- torch.log(pos_sim / sim_matrix.sum(dim=-1))).mean()
+        loss = 1 - avg_pos_sim + avg_neg_sim
         train_optimizer.zero_grad()
         loss.backward()
         train_optimizer.step()
 
         total_num += batch_size
         total_loss += loss.item() * batch_size
-        train_bar.set_description('Train Epoch: [{}/{}] Loss: {:.4f}'.format(epoch, epochs, total_loss / total_num))
+
+        total_avg_pos_sim += avg_pos_sim
+        total_avg_neg_sim += avg_neg_sim
+
+        train_bar.set_description('Train Epoch: [{}/{}] Loss: {:.4f} Pos: {} Neg: {}'.format(epoch, epochs, total_loss / total_num, total_avg_pos_sim / total_count, total_avg_neg_sim / total_count))
+        total_count += 1
 
     return total_loss / total_num
 
@@ -106,7 +128,7 @@ if __name__ == '__main__':
 
     # data prepare
     # train_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.train_transform, download=True)
-    root_data = '../SimCLR/Check_Data/ETIS/'
+    root_data = '../../Check_Data/ETIS/'
     train_data = utils.EndoscopyDataset(root_data=root_data + 'train', transform=utils.train_transform)
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
                               drop_last=True)
