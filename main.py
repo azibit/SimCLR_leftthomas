@@ -48,15 +48,18 @@ def train(net, data_loader, train_optimizer):
 def test(net, memory_data_loader, test_data_loader):
     net.eval()
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
+    target_bank = []
     with torch.no_grad():
         # generate feature bank
         for data, _, target in tqdm(memory_data_loader, desc='Feature extracting'):
             feature, out = net(data.cuda(non_blocking=True))
             feature_bank.append(feature)
+            target_bank.extend(target)
         # [D, N]
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()
         # [N]
-        feature_labels = torch.tensor(memory_data_loader.dataset.targets, device=feature_bank.device)
+        #feature_labels = torch.tensor(memory_data_loader.dataset.targets, device=feature_bank.device)
+        feature_labels = torch.tensor(target_bank, device=feature_bank.device)
         # loop test data to predict the label by weighted knn search
         test_bar = tqdm(test_data_loader)
         for data, _, target in test_bar:
@@ -81,7 +84,7 @@ def test(net, memory_data_loader, test_data_loader):
 
             pred_labels = pred_scores.argsort(dim=-1, descending=True)
             total_top1 += torch.sum((pred_labels[:, :1] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
-            total_top5 += torch.sum((pred_labels[:, :5] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
+            total_top5 += torch.sum((pred_labels[:, :4] == target.unsqueeze(dim=-1)).any(dim=-1).float()).item()
             test_bar.set_description('Test Epoch: [{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'
                                      .format(epoch, epochs, total_top1 / total_num * 100, total_top5 / total_num * 100))
 
@@ -103,14 +106,15 @@ if __name__ == '__main__':
 
     # data prepare
     # train_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.train_transform, download=True)
-    train_data = utils.EndoscopyDataset(root_data='../../Check_Data/ETIS/train', transform=utils.train_transform)
+    root_data = '../SimCLR/Check_Data/ETIS/'
+    train_data = utils.EndoscopyDataset(root_data=root_data + 'train', transform=utils.train_transform)
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
                               drop_last=True)
     # memory_data = utils.CIFAR10Pair(root='data', train=True, transform=utils.test_transform, download=True)
-    memory_data = utils.EndoscopyDataset(root_data='../../Check_Data/ETIS/train', transform=utils.test_transform)
+    memory_data = utils.EndoscopyDataset(root_data=root_data + 'train', transform=utils.test_transform)
     memory_loader = DataLoader(memory_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
     # test_data = utils.CIFAR10Pair(root='data', train=False, transform=utils.test_transform, download=True)
-    test_data = utils.EndoscopyDataset(root_data='../../Check_Data/ETIS/test', transform=utils.test_transform)
+    test_data = utils.EndoscopyDataset(root_data=root_data + 'test', transform=utils.test_transform)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
 
     # model setup and optimizer config
@@ -131,12 +135,12 @@ if __name__ == '__main__':
     for epoch in range(1, epochs + 1):
         train_loss = train(model, train_loader, optimizer)
         results['train_loss'].append(train_loss)
-        test_acc_1, test_acc_5 = test(model, memory_loader, test_loader)
-        results['test_acc@1'].append(test_acc_1)
-        results['test_acc@5'].append(test_acc_5)
+        #test_acc_1, test_acc_5 = test(model, memory_loader, test_loader)
+        #results['test_acc@1'].append(test_acc_1)
+        #results['test_acc@5'].append(test_acc_5)
         # save statistics
-        data_frame = pd.DataFrame(data=results, index=range(1, epoch + 1))
-        data_frame.to_csv('results/{}_statistics.csv'.format(save_name_pre), index_label='epoch')
-        if test_acc_1 > best_acc:
-            best_acc = test_acc_1
-            torch.save(model.state_dict(), 'results/{}_model.pth'.format(save_name_pre))
+        #data_frame = pd.DataFrame(data=results, index=range(1, epoch + 1))
+        #data_frame.to_csv('results/{}_statistics.csv'.format(save_name_pre), index_label='epoch')
+        #if test_acc_1 > best_acc:
+        #    best_acc = test_acc_1
+        #    torch.save(model.state_dict(), 'results/{}_model.pth'.format(save_name_pre))
